@@ -52,12 +52,16 @@ A single integer column stores multiple boolean flags packed as bits. Each flag 
 |---|---|
 | `key_bit?` | Check if a specific bit is set |
 | `set_key_bit` / `unset_key_bit` | Set or clear a single bit |
+| `toggle_key_bit` | XOR-flip a single bit |
 | `attr_name_key` / `attr_name_key=` | Boolean getter/setter (accepts truthy values) |
 | `was_previously_key_bit?` | Dirty-tracking: was bit set before last save |
+| `attr_name=` | Assign full flag set from an `Array`, `Integer`, or `nil` |
 | `associated_attr_name` | Returns array of all currently-set key names |
 | `set_attr_name(*keys)` / `unset_attr_name(*keys)` | Bulk OR-in / AND-NOT-out |
+| `validates_bitwise_attribute(attr, **opts)` | Class macro: numericality validation (0..max_bitmask) |
 | `with_attr_name(keys)` | Scope: any of the given bits set |
-| `with_exact_attr_name(keys)` | Scope: exactly these bits set |
+| `with_all_attr_name(keys)` | Scope: all of the given bits set (other bits may also be set) |
+| `with_exactly_attr_name(keys)` | Scope: column equals the bitmask exactly |
 | `without_attr_name(keys)` | Scope: none of the given bits set |
 
 ### Aliases
@@ -76,4 +80,4 @@ Aliases are resolved transparently in scopes and bulk set/unset operations.
 
 ## RuboCop
 
-Configured in `.rubocop.yml`: Ruby 2.6 target, double-quoted strings enforced, max line length 120.
+Configured in `.rubocop.yml`: Ruby 3.1 target, double-quoted strings enforced, max line length 120.

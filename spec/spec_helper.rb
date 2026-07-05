@@ -9,7 +9,7 @@ ActiveRecord::Schema.define do
   create_table :users do |t|
     t.integer :permissions, null: false, default: 0
     t.integer :flags, null: false, default: 0
-    t.integer :nullable_perms  # no default, nullable — for nil-safety tests
+    t.integer :nullable_perms # no default, nullable — for nil-safety tests
   end
 
   create_table :employees do |t|

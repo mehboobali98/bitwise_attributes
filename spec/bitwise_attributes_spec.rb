@@ -206,7 +206,7 @@ RSpec.describe BitwiseAttributes do
     subject(:user) { User.new(permissions: 0) }
 
     it "accepts an array and converts it to a bitmask" do
-      user.permissions = [:read, :admin]
+      user.permissions = %i[read admin]
       expect(user.permissions).to eq(5)
     end
 
@@ -232,7 +232,7 @@ RSpec.describe BitwiseAttributes do
     end
 
     it "works with constructor kwargs" do
-      u = User.new(permissions: [:read, :write])
+      u = User.new(permissions: %i[read write])
       expect(u.permissions).to eq(3)
     end
   end
@@ -281,17 +281,17 @@ RSpec.describe BitwiseAttributes do
     end
 
     it "returns only the keys whose bits are set" do
-      expect(User.new(permissions: 5).associated_permissions).to match_array(["read", "admin"])
+      expect(User.new(permissions: 5).associated_permissions).to match_array(%w[read admin])
     end
 
     it "returns all keys when every bit is set" do
-      expect(User.new(permissions: 7).associated_permissions).to match_array(["read", "write", "admin"])
+      expect(User.new(permissions: 7).associated_permissions).to match_array(%w[read write admin])
     end
   end
 
   describe ".extract_bitmask_keys" do
     it "decodes a bitmask integer into the corresponding key names" do
-      expect(User.extract_bitmask_keys(:permissions, 5)).to match_array(["read", "admin"])
+      expect(User.extract_bitmask_keys(:permissions, 5)).to match_array(%w[read admin])
     end
 
     it "returns an empty array for 0" do
@@ -299,7 +299,7 @@ RSpec.describe BitwiseAttributes do
     end
 
     it "accepts string integers" do
-      expect(User.extract_bitmask_keys(:permissions, "3")).to match_array(["read", "write"])
+      expect(User.extract_bitmask_keys(:permissions, "3")).to match_array(%w[read write])
     end
   end
 
@@ -307,7 +307,7 @@ RSpec.describe BitwiseAttributes do
     it "maps a hash of {id => bitmask} to {id => [keys]}" do
       result = User.decode_bitwise_values(:permissions, { 1 => 1, 2 => 6, 3 => 0 })
       expect(result[1]).to match_array(["read"])
-      expect(result[2]).to match_array(["write", "admin"])
+      expect(result[2]).to match_array(%w[write admin])
       expect(result[3]).to eq([])
     end
   end
@@ -375,7 +375,7 @@ RSpec.describe BitwiseAttributes do
       end
 
       it "returns records matching at least one of multiple keys" do
-        expect(User.with_permissions([:write, :admin])).to contain_exactly(read_write, all_perms)
+        expect(User.with_permissions(%i[write admin])).to contain_exactly(read_write, all_perms)
       end
 
       it "excludes records with none of the bits set" do
@@ -385,22 +385,22 @@ RSpec.describe BitwiseAttributes do
 
     describe ".with_all_[attribute] (A-01 rename)" do
       it "returns records where ALL specified bits are set (other bits may also be set)" do
-        result = User.with_all_permissions([:read, :write])
+        result = User.with_all_permissions(%i[read write])
         expect(result).to contain_exactly(read_write, all_perms)
       end
 
       it "does not return records missing any of the specified bits" do
-        expect(User.with_all_permissions([:read, :write])).not_to include(read_only)
+        expect(User.with_all_permissions(%i[read write])).not_to include(read_only)
       end
     end
 
     describe ".with_exactly_[attribute] (A-01 new scope)" do
       it "returns only records where the column value equals the bitmask exactly" do
-        expect(User.with_exactly_permissions([:read, :write])).to contain_exactly(read_write)
+        expect(User.with_exactly_permissions(%i[read write])).to contain_exactly(read_write)
       end
 
       it "excludes records that have additional bits set" do
-        expect(User.with_exactly_permissions([:read, :write])).not_to include(all_perms)
+        expect(User.with_exactly_permissions(%i[read write])).not_to include(all_perms)
       end
     end
 
@@ -410,7 +410,7 @@ RSpec.describe BitwiseAttributes do
       end
 
       it "excludes records with even one of the specified bits" do
-        expect(User.without_permissions([:read, :write])).to contain_exactly(none)
+        expect(User.without_permissions(%i[read write])).to contain_exactly(none)
       end
     end
   end
