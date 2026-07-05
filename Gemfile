@@ -10,3 +10,7 @@ gem "rake", "~> 13.0"
 gem "rspec", "~> 3.0"
 
 gem "rubocop", "~> 1.21"
+
+rails_version = ENV["RAILS_VERSION"]
+gem "activerecord", *(rails_version ? ["~> #{rails_version}.0"] : [">= 6.1.7.3", "< 9"])
+gem "sqlite3", ">= 1.4", "< 3"

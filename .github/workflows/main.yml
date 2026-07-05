@@ -4,24 +4,34 @@ on:
   push:
     branches:
       - main
-
   pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }}
+    name: Ruby ${{ matrix.ruby }} / Rails ${{ matrix.rails }}
     strategy:
+      fail-fast: false
       matrix:
-        ruby:
-          - '3.1.4'
+        include:
+          - ruby: '3.1.4'
+            rails: '6.1'
+          - ruby: '3.1'
+            rails: '7.0'
+          - ruby: '3.2'
+            rails: '7.1'
+          - ruby: '3.3'
+            rails: '7.2'
+
+    env:
+      RAILS_VERSION: ${{ matrix.rails }}
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
-    - name: Run the default task
-      run: bundle exec rake
+      - uses: actions/checkout@v4
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run the default task
+        run: bundle exec rake
