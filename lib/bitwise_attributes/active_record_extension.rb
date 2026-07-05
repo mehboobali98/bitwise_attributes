@@ -114,7 +114,7 @@ module BitwiseAttributes
 
         scope :"with_exact_#{attribute_name}", lambda { |bit_keys|
           bitmask = model.send(:calculate_bitmask, attribute_name, bit_keys)
-          where("#{attribute_name} & :bitmask = :bitmask", bitmask:)
+          where("#{attribute_name} & :bitmask = :bitmask", { bitmask: bitmask })
         }
 
         scope :"without_#{attribute_name}", lambda { |bit_keys|
