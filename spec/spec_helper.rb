@@ -9,6 +9,7 @@ ActiveRecord::Schema.define do
   create_table :users do |t|
     t.integer :permissions, null: false, default: 0
     t.integer :flags, null: false, default: 0
+    t.integer :nullable_perms  # no default, nullable — for nil-safety tests
   end
 
   create_table :employees do |t|
@@ -21,6 +22,7 @@ class User < ActiveRecord::Base
 
   bitwise_attribute :permissions, :read, :write, :admin
   bitwise_attribute :flags, :active, :verified, aliases: { confirmed: :verified }
+  bitwise_attribute :nullable_perms, :opt_a, :opt_b
 end
 
 class Employee < ActiveRecord::Base

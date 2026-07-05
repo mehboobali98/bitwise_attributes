@@ -51,6 +51,7 @@ For each key the following methods are generated (shown for `read`):
 user.read_bit?                # => true / false
 user.set_read_bit             # sets the bit in memory
 user.unset_read_bit           # clears the bit in memory
+user.toggle_read_bit          # XOR — flips the bit
 
 user.permissions_read         # alias for read_bit?
 user.permissions_read = true  # accepts any truthy/falsy value
@@ -65,19 +66,35 @@ user.was_previously_read_bit? # dirty-tracking: state before last save
 user.set_permissions(:read, :admin)    # OR-in multiple bits
 user.unset_permissions(:write)         # AND-NOT-out multiple bits
 
+user.permissions = [:read, :admin]     # assign the full set from an array
+user.permissions = 5                   # raw integer passthrough also accepted
+
 user.associated_permissions            # => ["read", "admin"]
 user.permissions_values                # => {"read"=>1, "write"=>2, "admin"=>4}
+```
+
+### Validation
+
+```ruby
+class User < ApplicationRecord
+  include BitwiseAttributes
+  bitwise_attribute :permissions, :read, :write, :admin
+  validates_bitwise_attribute :permissions            # 0..7, integer only
+  validates_bitwise_attribute :flags, allow_nil: true # passes Rails validator options through
+end
 ```
 
 ### Scopes
 
 ```ruby
-User.with_permissions(:read)               # any of the given bits set
+User.with_permissions(:read)                    # any of the given bits set
 User.with_permissions([:read, :write])
 
-User.with_exact_permissions([:read, :write])  # ALL given bits set (superset)
+User.with_all_permissions([:read, :write])      # ALL given bits set (other bits may also be set)
 
-User.without_permissions(:admin)           # none of the given bits set
+User.with_exactly_permissions([:read, :write])  # column = bitmask exactly (no other bits)
+
+User.without_permissions(:admin)                # none of the given bits set
 ```
 
 ### Aliases
