@@ -26,7 +26,7 @@ module BitwiseAttributes
 
         bitwise_aliases[attribute_name]    = aliases.with_indifferent_access.freeze
         bitwise_attributes[attribute_name] = keys.map.with_index { |key, index| [key, 1 << index] }
-                                                 .to_h.with_indifferent_access.freeze
+                                                     .to_h.with_indifferent_access.freeze
         define_bitwise_methods(attribute_name, keys)
       end
 
@@ -78,7 +78,7 @@ module BitwiseAttributes
       private
 
       def define_bitwise_methods(attribute_name, keys)
-        model_class = self  # Q-03: capture at definition time; avoids using AR::Relation#model inside lambdas
+        model_class = self # Q-03: capture at definition time; avoids using AR::Relation#model inside lambdas
 
         define_method(:"#{attribute_name}_values") { self.class.bitwise_attributes[attribute_name] }
         define_method(:"#{attribute_name}_aliases") { self.class.bitwise_aliases[attribute_name] }
@@ -86,17 +86,17 @@ module BitwiseAttributes
         keys.each do |key|
           define_method(:"#{key}_bit?") do
             bit_value = send(:"#{attribute_name}_values")[key]
-            (self[attribute_name].to_i & bit_value) != 0  # C-01: .to_i guards against NULL
+            (self[attribute_name].to_i & bit_value) != 0 # C-01: .to_i guards against NULL
           end
 
           define_method(:"set_#{key}_bit") do
             bit_value = send(:"#{attribute_name}_values")[key]
-            self[attribute_name] = self[attribute_name].to_i | bit_value  # C-01
+            self[attribute_name] = self[attribute_name].to_i | bit_value # C-01
           end
 
           define_method(:"unset_#{key}_bit") do
             bit_value = send(:"#{attribute_name}_values")[key]
-            self[attribute_name] = self[attribute_name].to_i & ~bit_value  # C-01
+            self[attribute_name] = self[attribute_name].to_i & ~bit_value # C-01
           end
 
           # A-02: XOR toggle — the most natural bitwise operation
@@ -113,7 +113,7 @@ module BitwiseAttributes
 
           define_method(:"was_previously_#{key}_bit?") do
             bit_value = send(:"#{attribute_name}_values")[key]
-            (attribute_previously_was(attribute_name).to_i & bit_value) != 0  # C-01
+            (attribute_previously_was(attribute_name).to_i & bit_value) != 0 # C-01
           end
         end
 
@@ -121,7 +121,7 @@ module BitwiseAttributes
         define_method(:"unset_#{attribute_name}") { |*ks| update_bitwise_attribute(attribute_name, ks, :remove) }
 
         define_method(:"associated_#{attribute_name}") do
-          send(:"#{attribute_name}_values").reject { |_key, bit| (self[attribute_name].to_i & bit).zero? }.keys  # C-01
+          send(:"#{attribute_name}_values").reject { |_key, bit| (self[attribute_name].to_i & bit).zero? }.keys # C-01
         end
 
         # A-04: assign the full flag set from an array or pass an integer through directly
@@ -178,9 +178,6 @@ module BitwiseAttributes
       self.class.normalize_and_fetch_values(attribute_name, keys)
     end
 
-    private
-
-    # A-03: internal helper — not part of the public instance API
     def update_bitwise_attribute(attribute_name, keys, operation)
       bitmask = self.class.send(:calculate_bitmask, attribute_name, keys)
       self[attribute_name] =
@@ -190,5 +187,7 @@ module BitwiseAttributes
           self[attribute_name].to_i & ~bitmask  # C-01
         end
     end
+
+    private :update_bitwise_attribute # A-03: internal helper — not part of the public instance API
   end
 end
