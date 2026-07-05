@@ -1,39 +1,138 @@
 # BitwiseAttributes
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/bitwise_attributes`. To experiment with that code, run `bin/console` for an interactive prompt.
+Pack multiple boolean flags into a single integer column on an ActiveRecord model. Each flag occupies one bit, so you get cheap storage and fast bitwise SQL queries with no schema changes per new flag.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add to your Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
+```ruby
+gem "bitwise_attributes"
+```
 
-    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG
+Or install directly:
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+```sh
+gem install bitwise_attributes
+```
 
-    $ gem install UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG
+## Requirements
+
+- Ruby >= 3.1.4
+- Rails (ActiveRecord) >= 6.1.7.3
 
 ## Usage
 
-TODO: Write usage instructions here
+### Setup
+
+Add an integer column to your table (default `0`, not null):
+
+```ruby
+add_column :users, :permissions, :integer, null: false, default: 0
+```
+
+Include the concern and declare your attribute:
+
+```ruby
+class User < ApplicationRecord
+  include BitwiseAttributes
+
+  bitwise_attribute :permissions, :read, :write, :admin
+end
+```
+
+Keys are assigned bit positions in declaration order: `read` → 1, `write` → 2, `admin` → 4.
+
+### Per-flag methods
+
+For each key the following methods are generated (shown for `read`):
+
+```ruby
+user.read_bit?                # => true / false
+user.set_read_bit             # sets the bit in memory
+user.unset_read_bit           # clears the bit in memory
+
+user.permissions_read         # alias for read_bit?
+user.permissions_read = true  # accepts any truthy/falsy value
+user.permissions_read = false
+
+user.was_previously_read_bit? # dirty-tracking: state before last save
+```
+
+### Bulk operations
+
+```ruby
+user.set_permissions(:read, :admin)    # OR-in multiple bits
+user.unset_permissions(:write)         # AND-NOT-out multiple bits
+
+user.associated_permissions            # => ["read", "admin"]
+user.permissions_values                # => {"read"=>1, "write"=>2, "admin"=>4}
+```
+
+### Scopes
+
+```ruby
+User.with_permissions(:read)               # any of the given bits set
+User.with_permissions([:read, :write])
+
+User.with_exact_permissions([:read, :write])  # ALL given bits set (superset)
+
+User.without_permissions(:admin)           # none of the given bits set
+```
+
+### Aliases
+
+Map alternative names to existing keys:
+
+```ruby
+bitwise_attribute :flags, :active, :verified, aliases: { confirmed: :verified }
+
+user.set_flags(:confirmed)         # sets :verified bit
+User.with_flags(:confirmed)        # same as with_flags(:verified)
+```
+
+### Class-level helpers
+
+```ruby
+User.extract_bitmask_keys(:permissions, 5)
+# => ["read", "admin"]
+
+User.decode_bitwise_values(:permissions, { 1 => 3, 2 => 4 })
+# => { 1 => ["read", "write"], 2 => ["admin"] }
+```
+
+### Inheritance
+
+Subclasses inherit all bitwise attribute definitions from their parent. Each subclass gets its own independent copy, so adding or redefining an attribute on a subclass does not affect the parent.
+
+```ruby
+class AdminUser < User
+  bitwise_attribute :permissions, :read, :write, :admin, :superadmin
+end
+
+AdminUser.bitwise_attributes[:permissions].keys  # => [..., "superadmin"]
+User.bitwise_attributes[:permissions].keys       # unchanged
+```
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```sh
+bin/setup          # install dependencies
+bundle exec rake   # run tests + rubocop
+bundle exec rspec  # tests only
+bin/console        # interactive prompt with the gem loaded
+```
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+To test against a specific Rails version:
+
+```sh
+RAILS_VERSION=6.1 bundle install && bundle exec rake
+```
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/bitwise_attributes. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/bitwise_attributes/blob/main/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome on GitHub at https://github.com/mehboobali98/bitwise_attributes. Contributors are expected to adhere to the [code of conduct](https://github.com/mehboobali98/bitwise_attributes/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the BitwiseAttributes project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/bitwise_attributes/blob/main/CODE_OF_CONDUCT.md).
+Available as open source under the [MIT License](https://opensource.org/licenses/MIT).
