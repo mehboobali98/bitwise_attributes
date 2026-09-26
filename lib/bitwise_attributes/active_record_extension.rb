@@ -26,7 +26,7 @@ module BitwiseAttributes
 
         bitwise_aliases[attribute_name]    = aliases.with_indifferent_access.freeze
         bitwise_attributes[attribute_name] = keys.map.with_index { |key, index| [key, 1 << index] }
-                                                     .to_h.with_indifferent_access.freeze
+                                                 .to_h.with_indifferent_access.freeze
         define_bitwise_methods(attribute_name, keys)
       end
 
