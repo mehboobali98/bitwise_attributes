@@ -13,18 +13,62 @@ RSpec.describe BitwiseAttributes do
       expect(User.bitwise_aliases[:flags][:confirmed]).to eq(:verified)
     end
 
-    it "raises ArgumentError when an alias targets a key not in the definition" do
-      expect do
-        Class.new(ActiveRecord::Base) do
-          self.table_name = "users"
-          include BitwiseAttributes
-          bitwise_attribute :permissions, :read, :write, aliases: { su: :nonexistent }
-        end
-      end.to raise_error(ArgumentError, /Invalid aliases/)
-    end
-
     it "freezes the key mapping so it cannot be mutated at runtime" do
       expect(User.bitwise_attributes[:permissions]).to be_frozen
+    end
+
+    context "input validation (C-03)" do
+      it "raises when no keys are given" do
+        expect do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = "users"
+            include BitwiseAttributes
+            bitwise_attribute :permissions
+          end
+        end.to raise_error(ArgumentError, /at least one key is required/)
+      end
+
+      it "raises when duplicate keys are given" do
+        expect do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = "users"
+            include BitwiseAttributes
+            bitwise_attribute :permissions, :read, :write, :read
+          end
+        end.to raise_error(ArgumentError, /duplicate keys/)
+      end
+
+      it "raises when an alias targets a key not in the definition" do
+        expect do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = "users"
+            include BitwiseAttributes
+            bitwise_attribute :permissions, :read, :write, aliases: { su: :nonexistent }
+          end
+        end.to raise_error(ArgumentError, /Invalid aliases/)
+      end
+    end
+
+    context "overflow guard (C-02)" do
+      it "raises when key count exceeds 62" do
+        expect do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = "users"
+            include BitwiseAttributes
+            bitwise_attribute :permissions, *(1..63).map { |i| :"f#{i}" }
+          end
+        end.to raise_error(ArgumentError, /exceeds the 62-bit BIGINT limit/)
+      end
+
+      it "warns when key count exceeds 30" do
+        expect do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = "users"
+            include BitwiseAttributes
+            bitwise_attribute :permissions, *(1..31).map { |i| :"f#{i}" }
+          end
+        end.to output(/use a BIGINT column/).to_stderr
+      end
     end
   end
 
@@ -37,6 +81,30 @@ RSpec.describe BitwiseAttributes do
 
     it "returns the alias mapping on the instance" do
       expect(user.flags_aliases["confirmed"]).to eq(:verified)
+    end
+  end
+
+  describe "nil safety (C-01)" do
+    it "does not raise when the attribute is NULL" do
+      user = User.new
+      expect { user.opt_a_bit? }.not_to raise_error
+      expect(user.opt_a_bit?).to be false
+    end
+
+    it "treats NULL as zero in associated_*" do
+      user = User.new
+      expect(user.associated_nullable_perms).to eq([])
+    end
+
+    it "does not raise in was_previously_*_bit? before the first save" do
+      user = User.create!
+      expect { user.was_previously_opt_a_bit? }.not_to raise_error
+    end
+
+    it "does not raise in set / unset when attribute is NULL" do
+      user = User.new
+      expect { user.set_opt_a_bit }.not_to raise_error
+      expect(user.opt_a_bit?).to be true
     end
   end
 
@@ -63,15 +131,15 @@ RSpec.describe BitwiseAttributes do
 
     describe "#set_[key]_bit and #unset_[key]_bit" do
       it "sets a single bit without disturbing others" do
-        user.permissions = 2 # write
+        user.permissions = 2
         user.set_read_bit
         expect(user.permissions).to eq(3)
       end
 
       it "unsets a single bit without disturbing others" do
-        user.permissions = 7 # all bits
+        user.permissions = 7
         user.unset_write_bit
-        expect(user.permissions).to eq(5) # read(1) + admin(4)
+        expect(user.permissions).to eq(5)
       end
 
       it "is idempotent: setting an already-set bit changes nothing" do
@@ -84,6 +152,28 @@ RSpec.describe BitwiseAttributes do
         user.permissions = 0
         user.unset_read_bit
         expect(user.permissions).to eq(0)
+      end
+    end
+
+    describe "#toggle_[key]_bit (A-02)" do
+      it "sets the bit when it was clear" do
+        user.permissions = 0
+        user.toggle_read_bit
+        expect(user.read_bit?).to be true
+      end
+
+      it "clears the bit when it was set" do
+        user.permissions = 1
+        user.toggle_read_bit
+        expect(user.read_bit?).to be false
+      end
+
+      it "does not disturb other bits" do
+        user.permissions = 6 # write + admin
+        user.toggle_read_bit
+        expect(user.permissions).to eq(7)
+        user.toggle_read_bit
+        expect(user.permissions).to eq(6)
       end
     end
   end
@@ -103,19 +193,47 @@ RSpec.describe BitwiseAttributes do
     it "setter accepts truthy values to set the bit" do
       user.permissions_write = true
       expect(user.write_bit?).to be true
-
-      user2 = User.new(permissions: 0)
-      user2.permissions_admin = 1
-      expect(user2.admin_bit?).to be true
     end
 
     it "setter accepts falsy values to unset the bit" do
-      user.permissions = 3 # read + write
+      user.permissions = 3
       user.permissions_write = false
       expect(user.permissions).to eq(1)
+    end
+  end
 
-      user.permissions_read = nil
+  describe "#[attribute]= array setter (A-04)" do
+    subject(:user) { User.new(permissions: 0) }
+
+    it "accepts an array and converts it to a bitmask" do
+      user.permissions = %i[read admin]
+      expect(user.permissions).to eq(5)
+    end
+
+    it "accepts an empty array and sets to 0" do
+      user.permissions = 7
+      user.permissions = []
       expect(user.permissions).to eq(0)
+    end
+
+    it "passes an integer through unchanged" do
+      user.permissions = 3
+      expect(user.permissions).to eq(3)
+    end
+
+    it "treats nil as 0" do
+      user.permissions = 7
+      user.permissions = nil
+      expect(user.permissions).to eq(0)
+    end
+
+    it "raises ArgumentError for unsupported types" do
+      expect { user.permissions = "bad" }.to raise_error(ArgumentError, /Expected Integer or Array/)
+    end
+
+    it "works with constructor kwargs" do
+      u = User.new(permissions: %i[read write])
+      expect(u.permissions).to eq(3)
     end
   end
 
@@ -124,17 +242,17 @@ RSpec.describe BitwiseAttributes do
 
     it "sets multiple bits at once" do
       user.set_permissions(:read, :admin)
-      expect(user.permissions).to eq(5) # 1 + 4
+      expect(user.permissions).to eq(5)
     end
 
     it "leaves already-set bits intact when setting" do
-      user.permissions = 2 # write
+      user.permissions = 2
       user.set_permissions(:read)
       expect(user.permissions).to eq(3)
     end
 
     it "unsets multiple bits at once" do
-      user.permissions = 7 # all
+      user.permissions = 7
       user.unset_permissions(:read, :write)
       expect(user.permissions).to eq(4)
     end
@@ -145,12 +263,15 @@ RSpec.describe BitwiseAttributes do
       expect(user.permissions).to eq(3)
     end
 
-    it "raises ArgumentError for an unrecognised key" do
-      expect { user.set_permissions(:superadmin) }.to raise_error(ArgumentError, /Invalid permissions/)
+    it "raises ArgumentError naming only the invalid keys (Q-02)" do
+      expect { user.set_permissions(:superadmin) }
+        .to raise_error(ArgumentError, /Unknown permissions keys:.*superadmin/)
     end
+  end
 
-    it "raises ArgumentError when unsetting an unrecognised key" do
-      expect { user.unset_permissions(:superadmin) }.to raise_error(ArgumentError, /Invalid permissions/)
+  describe "#update_bitwise_attribute is private (A-03)" do
+    it "is not part of the public interface" do
+      expect(User.new).not_to respond_to(:update_bitwise_attribute)
     end
   end
 
@@ -160,19 +281,17 @@ RSpec.describe BitwiseAttributes do
     end
 
     it "returns only the keys whose bits are set" do
-      user = User.new(permissions: 5) # read(1) + admin(4)
-      expect(user.associated_permissions).to match_array(["read", "admin"])
+      expect(User.new(permissions: 5).associated_permissions).to match_array(%w[read admin])
     end
 
     it "returns all keys when every bit is set" do
-      user = User.new(permissions: 7)
-      expect(user.associated_permissions).to match_array(["read", "write", "admin"])
+      expect(User.new(permissions: 7).associated_permissions).to match_array(%w[read write admin])
     end
   end
 
   describe ".extract_bitmask_keys" do
     it "decodes a bitmask integer into the corresponding key names" do
-      expect(User.extract_bitmask_keys(:permissions, 5)).to match_array(["read", "admin"])
+      expect(User.extract_bitmask_keys(:permissions, 5)).to match_array(%w[read admin])
     end
 
     it "returns an empty array for 0" do
@@ -180,7 +299,7 @@ RSpec.describe BitwiseAttributes do
     end
 
     it "accepts string integers" do
-      expect(User.extract_bitmask_keys(:permissions, "3")).to match_array(["read", "write"])
+      expect(User.extract_bitmask_keys(:permissions, "3")).to match_array(%w[read write])
     end
   end
 
@@ -188,42 +307,75 @@ RSpec.describe BitwiseAttributes do
     it "maps a hash of {id => bitmask} to {id => [keys]}" do
       result = User.decode_bitwise_values(:permissions, { 1 => 1, 2 => 6, 3 => 0 })
       expect(result[1]).to match_array(["read"])
-      expect(result[2]).to match_array(["write", "admin"])
+      expect(result[2]).to match_array(%w[write admin])
       expect(result[3]).to eq([])
+    end
+  end
+
+  describe ".validates_bitwise_attribute (G-01)" do
+    let(:model_class) do
+      Class.new(ActiveRecord::Base) do
+        self.table_name = "users"
+        include BitwiseAttributes
+        bitwise_attribute :permissions, :read, :write, :admin
+        validates_bitwise_attribute :permissions
+      end
+    end
+
+    it "is valid when the value is within range" do
+      expect(model_class.new(permissions: 7)).to be_valid
+    end
+
+    it "is valid for zero" do
+      expect(model_class.new(permissions: 0)).to be_valid
+    end
+
+    it "is invalid when the value exceeds the maximum bitmask" do
+      expect(model_class.new(permissions: 8)).not_to be_valid
+    end
+
+    it "is invalid for negative values" do
+      expect(model_class.new(permissions: -1)).not_to be_valid
+    end
+
+    it "forwards extra options (e.g. allow_nil)" do
+      klass = Class.new(ActiveRecord::Base) do
+        self.table_name = "users"
+        include BitwiseAttributes
+        bitwise_attribute :nullable_perms, :opt_a, :opt_b
+        validates_bitwise_attribute :nullable_perms, allow_nil: true
+      end
+      expect(klass.new(nullable_perms: nil)).to be_valid
     end
   end
 
   describe "#was_previously_[key]_bit?" do
     it "reflects the bit state before the most recent save" do
-      user = User.create!(permissions: 1) # read
-      user.update!(permissions: 0)        # clear read
-
+      user = User.create!(permissions: 1)
+      user.update!(permissions: 0)
       expect(user.was_previously_read_bit?).to be true
     end
 
     it "returns false when the bit was not set before the save" do
       user = User.create!(permissions: 0)
-      user.update!(permissions: 1) # set read
-
+      user.update!(permissions: 1)
       expect(user.was_previously_read_bit?).to be false
     end
   end
 
   describe "query scopes" do
-    let!(:none)       { User.create!(permissions: 0) }          # no bits
-    let!(:read_only)  { User.create!(permissions: 1) }          # read
-    let!(:read_write) { User.create!(permissions: 3) }          # read + write
-    let!(:all_perms)  { User.create!(permissions: 7) }          # read + write + admin
+    let!(:none)       { User.create!(permissions: 0) }
+    let!(:read_only)  { User.create!(permissions: 1) }
+    let!(:read_write) { User.create!(permissions: 3) }
+    let!(:all_perms)  { User.create!(permissions: 7) }
 
     describe ".with_[attribute]" do
       it "returns records that have ANY of the specified bits set" do
-        result = User.with_permissions(:admin)
-        expect(result).to contain_exactly(all_perms)
+        expect(User.with_permissions(:admin)).to contain_exactly(all_perms)
       end
 
       it "returns records matching at least one of multiple keys" do
-        result = User.with_permissions([:write, :admin])
-        expect(result).to contain_exactly(read_write, all_perms)
+        expect(User.with_permissions(%i[write admin])).to contain_exactly(read_write, all_perms)
       end
 
       it "excludes records with none of the bits set" do
@@ -231,26 +383,34 @@ RSpec.describe BitwiseAttributes do
       end
     end
 
-    describe ".with_exact_[attribute]" do
-      it "returns only records where ALL specified bits are set (superset match)" do
-        result = User.with_exact_permissions([:read, :write])
+    describe ".with_all_[attribute] (A-01 rename)" do
+      it "returns records where ALL specified bits are set (other bits may also be set)" do
+        result = User.with_all_permissions(%i[read write])
         expect(result).to contain_exactly(read_write, all_perms)
       end
 
       it "does not return records missing any of the specified bits" do
-        expect(User.with_exact_permissions([:read, :write])).not_to include(read_only)
+        expect(User.with_all_permissions(%i[read write])).not_to include(read_only)
+      end
+    end
+
+    describe ".with_exactly_[attribute] (A-01 new scope)" do
+      it "returns only records where the column value equals the bitmask exactly" do
+        expect(User.with_exactly_permissions(%i[read write])).to contain_exactly(read_write)
+      end
+
+      it "excludes records that have additional bits set" do
+        expect(User.with_exactly_permissions(%i[read write])).not_to include(all_perms)
       end
     end
 
     describe ".without_[attribute]" do
       it "returns records that have NONE of the specified bits set" do
-        result = User.without_permissions(:admin)
-        expect(result).to contain_exactly(none, read_only, read_write)
+        expect(User.without_permissions(:admin)).to contain_exactly(none, read_only, read_write)
       end
 
       it "excludes records with even one of the specified bits" do
-        result = User.without_permissions([:read, :write])
-        expect(result).to contain_exactly(none)
+        expect(User.without_permissions(%i[read write])).to contain_exactly(none)
       end
     end
   end
@@ -259,12 +419,12 @@ RSpec.describe BitwiseAttributes do
     subject(:user) { User.new(flags: 0) }
 
     it "resolves aliases in bulk set" do
-      user.set_flags(:confirmed) # alias for :verified
+      user.set_flags(:confirmed)
       expect(user.verified_bit?).to be true
     end
 
     it "resolves aliases in bulk unset" do
-      user.flags = 2 # verified(2)
+      user.flags = 2
       user.unset_flags(:confirmed)
       expect(user.verified_bit?).to be false
     end
@@ -277,8 +437,9 @@ RSpec.describe BitwiseAttributes do
       expect(User.without_flags(:confirmed)).to contain_exactly(unverified)
     end
 
-    it "raises ArgumentError for a key that is neither a defined key nor an alias" do
-      expect { user.set_flags(:nonexistent) }.to raise_error(ArgumentError)
+    it "raises ArgumentError naming only the invalid key (Q-02)" do
+      expect { user.set_flags(:nonexistent) }
+        .to raise_error(ArgumentError, /Unknown flags keys:.*nonexistent/)
     end
   end
 

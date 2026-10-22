@@ -9,7 +9,9 @@ Gem::Specification.new do |spec|
   spec.email = ["mehboob.ali@7vals.com"]
 
   spec.summary = "Store multiple boolean flags in a single integer column using bitwise operations."
-  spec.description = "BitwiseAttributes extends ActiveRecord models with a bitwise_attribute DSL that packs multiple boolean flags into a single integer column, generating per-flag getter/setter methods and query scopes automatically."
+  spec.description = "BitwiseAttributes extends ActiveRecord models with a bitwise_attribute DSL that packs " \
+                     "multiple boolean flags into a single integer column, generating per-flag getter/setter " \
+                     "methods and query scopes automatically."
   spec.homepage = "https://github.com/mehboobali98/bitwise_attributes"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.4"

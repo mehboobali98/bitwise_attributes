@@ -1,5 +1,7 @@
 AllCops:
-  TargetRubyVersion: 2.6
+  TargetRubyVersion: 3.1
+  NewCops: disable
+  SuggestExtensions: false
 
 Style/StringLiterals:
   Enabled: true
@@ -11,3 +13,33 @@ Style/StringLiteralsInInterpolation:
 
 Layout/LineLength:
   Max: 120
+
+Style/Documentation:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
+    - "spec/**/*"
+
+Metrics/ModuleLength:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "lib/bitwise_attributes/active_record_extension.rb"
+
+Metrics/MethodLength:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
+
+Metrics/AbcSize:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - "lib/bitwise_attributes/active_record_extension.rb"
