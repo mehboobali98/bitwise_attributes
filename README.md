@@ -2,6 +2,9 @@
 
 Pack multiple boolean flags into a single integer column on an ActiveRecord model. Each flag occupies one bit, so you get cheap storage and fast bitwise SQL queries with no schema changes per new flag.
 
+On the two years this ran internally before it was published, and what that changed:
+[I used it internally for two years before publishing it](https://mehboob.dev/blog/two-years-before-i-published-it).
+
 ## Installation
 
 Add to your Gemfile:
