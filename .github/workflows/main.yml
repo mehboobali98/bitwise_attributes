@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Ruby ${{ matrix.ruby }} / Rails ${{ matrix.rails }}
     strategy:
       fail-fast: false
